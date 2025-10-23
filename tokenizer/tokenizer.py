@@ -5,9 +5,9 @@ from tqdm import tqdm
 
 class Tokenizer():
 
-    def __init__(self, data_path, pattern, additional_tokens=20, merges=None):
+    def __init__(self, data_path, pattern, num_merges=20, merges=None):
         self.pattern = re.compile(pattern)
-        self.additional_tokens = additional_tokens
+        self.num_merges = num_merges
         self.itob = {i: bytes([i]) for i in range(256)} # special tokens will be added later
         if merges:
             for i, pair in enumerate(merges):
@@ -48,7 +48,7 @@ class Tokenizer():
 
         merges = []
 
-        for i in tqdm(range(self.additional_tokens)):
+        for i in tqdm(range(self.num_merges)):
 
             next_idx = 256 + i
 
