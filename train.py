@@ -88,3 +88,14 @@ for iter in range(max_iters):
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
+
+# save the model
+torch.save({
+    "model_state_dict": model.state_dict(),
+    "vocab_size": vocab_size,
+    "block_size": block_size,
+    "n_embd": n_embd,
+    "n_head": n_head,
+    "n_layer": n_layer,
+    "dropout": dropout,
+}, "model.pt")
