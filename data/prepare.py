@@ -1,11 +1,12 @@
-import os
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import numpy as np
 
 from tqdm import tqdm
 from random import random
 
 from datasets import load_dataset
-from ..tokenizer import truncated_cl100k
+from tokenizer import truncated_cl100k
 
 # parameters
 TRAIN_TEST_SPLIT = 0.9
