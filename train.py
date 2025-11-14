@@ -18,7 +18,7 @@ n_embd = 512
 n_head = n_embd // 64
 n_layer = 8
 dropout = 0.1
-use_sinusoidal_embd = True
+embedding_type = "rope"  # among "learned", "sinusoidal", "rope"
 # ------------
 
 torch.manual_seed(1337)
@@ -63,7 +63,7 @@ model = GPTLanguageModel(
     n_head=n_head,
     n_layer=n_layer,
     dropout=dropout,
-    use_sinusoidal_embd=use_sinusoidal_embd,
+    embedding_type=embedding_type,
 )
 
 m = model.to(device)
@@ -100,5 +100,5 @@ torch.save({
     "n_head": n_head,
     "n_layer": n_layer,
     "dropout": dropout,
-    "use_sinusoidal_embd": use_sinusoidal_embd,
+    "embedding_type": embedding_type,
 }, "model.pt")
