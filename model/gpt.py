@@ -1,22 +1,10 @@
-from math import log
-
 import torch
 import torch.nn as nn
+
+from math import log
 from torch.nn import functional as F
+from .embedding import sinusoidal_embedding
 
-
-def sinusoidal_embedding(max_len, d_model):
-    """ implement sinusoidal positional embeddings """
-    pe = torch.zeros(max_len, d_model)
-    position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)  # (max_len, 1)
-    div_term = torch.exp(
-        torch.arange(0, d_model, 2, dtype=torch.float32) *
-        (-log(10000.0) / d_model)
-    )  # (d_model/2,)
-
-    pe[:, 0::2] = torch.sin(position * div_term)
-    pe[:, 1::2] = torch.cos(position * div_term)
-    return pe  # (max_len, d_model)
 
 class Head(nn.Module):
     """ one head of self-attention """
@@ -106,7 +94,7 @@ class GPTLanguageModel(nn.Module):
         if self.use_sinusoidal_embd:
             # sinusoidal positional embeddings
             pe = sinusoidal_embedding(block_size, n_embd)
-            self.register_buffer("positional_embedding_table", pe)
+            self.register_buffer("position_embedding_table", pe)
         else:
             # learned positional embeddings
             self.position_embedding_table = nn.Embedding(block_size, n_embd)
@@ -136,7 +124,7 @@ class GPTLanguageModel(nn.Module):
 
         # positional embeddings
         if self.use_sinusoidal_embd:
-            pos_emb = self.positional_embedding_table[:T, :]  # (T,C)
+            pos_emb = self.position_embedding_table[:T, :]  # (T,C)
         else:
             pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device)) # (T,C)
 
