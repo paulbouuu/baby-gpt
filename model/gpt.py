@@ -1,7 +1,22 @@
+from math import log
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+
+def sinusoidal_embedding(max_len, d_model):
+    """ implement sinusoidal positional embeddings """
+    pe = torch.zeros(max_len, d_model)
+    position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)  # (max_len, 1)
+    div_term = torch.exp(
+        torch.arange(0, d_model, 2, dtype=torch.float32) *
+        (-log(10000.0) / d_model)
+    )  # (d_model/2,)
+
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
+    return pe  # (max_len, d_model)
 
 class Head(nn.Module):
     """ one head of self-attention """
@@ -81,12 +96,21 @@ class Block(nn.Module):
 
 class GPTLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout):
+    def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout, use_sinusoidal_embd):
         super().__init__()
         self.block_size = block_size
+        self.use_sinusoidal_embd = use_sinusoidal_embd
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+
+        if self.use_sinusoidal_embd:
+            # sinusoidal positional embeddings
+            pe = sinusoidal_embedding(block_size, n_embd)
+            self.register_buffer("positional_embedding_table", pe)
+        else:
+            # learned positional embeddings
+            self.position_embedding_table = nn.Embedding(block_size, n_embd)
+
         self.blocks = nn.Sequential(*[
             Block(n_embd, n_head=n_head, block_size=block_size, dropout=dropout)
             for _ in range(n_layer)])
@@ -108,9 +132,15 @@ class GPTLanguageModel(nn.Module):
         B, T = idx.shape
 
         # idx and targets are both (B,T) tensor of integers
-        tok_emb = self.token_embedding_table(idx) # (B,T,C)
-        pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device)) # (T,C)
-        x = tok_emb + pos_emb # (B,T,C)
+        tok_emb = self.token_embedding_table(idx) * (self.token_embedding_table.embedding_dim ** 0.5) # (B,T,C)
+
+        # positional embeddings
+        if self.use_sinusoidal_embd:
+            pos_emb = self.positional_embedding_table[:T, :]  # (T,C)
+        else:
+            pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device)) # (T,C)
+
+        x = tok_emb + pos_emb # (B,T,C), broadcasting position embeddings
         x = self.blocks(x) # (B,T,C)
         x = self.ln_f(x) # (B,T,C)
         logits = self.lm_head(x) # (B,T,vocab_size)
