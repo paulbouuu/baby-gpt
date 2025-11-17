@@ -51,6 +51,22 @@ n_layer = 8
 dropout = 0.1
 ```
 
+## Results
+
+The model was trained for 5000 iterations on a single A10 (24 GB VRAM) GPU, for the 3 different positional embeddings implemented: learned, sinusoidal, and RoPE. It took approximately an hour to train each model.
+
+| Positional encoding | Parameters (M) | Final val loss |
+|--------------------|------------|----------------|
+| **RoPE**           | 41.87 M     | **3.739**      |
+| Sinusoidal         | 41.87 M     | 3.841          |
+| Learned            | 42.13 M     | 3.945          |
+
+RoPE outperformed the other methods, achieving the lowest validation loss and fastest convergence. Sinusoidal embeddings were competitive but slightly worse than RoPE, while learned embeddings had the highest loss and slowest convergence.
+
+### Samples
+
+(to be added)
+
 ## What's next?
 
 1. Add special tokens (e.g. end-of-text, beginning-of-sentence, padding, unknown) to the tokenizer and retrain the model
