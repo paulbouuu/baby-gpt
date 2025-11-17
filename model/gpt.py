@@ -1,20 +1,25 @@
 import torch
 import torch.nn as nn
 
-from math import log
 from torch.nn import functional as F
-from .embedding import sinusoidal_embedding
+from .embedding import sinusoidal_embedding, build_rope_cache, apply_rope
 
 
 class Head(nn.Module):
     """ one head of self-attention """
 
-    def __init__(self, n_embd, head_size, block_size, dropout):
+    def __init__(self, n_embd, head_size, block_size, dropout, use_rope):
         super().__init__()
+        self.use_rope = use_rope
         self.key = nn.Linear(n_embd, head_size, bias=False)
         self.query = nn.Linear(n_embd, head_size, bias=False)
         self.value = nn.Linear(n_embd, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+
+        if self.use_rope:
+            cos, sin = build_rope_cache(block_size, head_size)
+            self.register_buffer("rope_cos", cos)
+            self.register_buffer("rope_sin", sin)
 
         self.dropout = nn.Dropout(dropout)
 
@@ -24,6 +29,10 @@ class Head(nn.Module):
         B,T,C = x.shape
         k = self.key(x)   # (B,T,hs)
         q = self.query(x) # (B,T,hs)
+
+        if self.use_rope:
+            q, k = apply_rope(q, k, self.rope_cos, self.rope_sin, T)
+        
         # compute attention scores ("affinities")
         wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
@@ -37,10 +46,10 @@ class Head(nn.Module):
 class MultiHeadAttention(nn.Module):
     """ multiple heads of self-attention in parallel """
 
-    def __init__(self, n_embd, num_heads, head_size, block_size, dropout):
+    def __init__(self, n_embd, num_heads, head_size, block_size, dropout, use_rope):
         super().__init__()
         self.heads = nn.ModuleList([
-            Head(n_embd, head_size, block_size, dropout) for _ in range(num_heads)
+            Head(n_embd, head_size, block_size, dropout, use_rope) for _ in range(num_heads)
         ])
         self.proj = nn.Linear(head_size * num_heads, n_embd)
         self.dropout = nn.Dropout(dropout)
@@ -68,11 +77,11 @@ class FeedForward(nn.Module):
 class Block(nn.Module):
     """ Transformer block: communication followed by computation """
 
-    def __init__(self, n_embd, n_head, block_size, dropout):
+    def __init__(self, n_embd, n_head, block_size, dropout, use_rope):
         # n_embd: embedding dimension, n_head: the number of heads we'd like
         super().__init__()
         head_size = n_embd // n_head
-        self.sa = MultiHeadAttention(n_embd, n_head, head_size, block_size, dropout)
+        self.sa = MultiHeadAttention(n_embd, n_head, head_size, block_size, dropout, use_rope)
         self.ffwd = FeedForward(n_embd, dropout)
         self.ln1 = nn.LayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
@@ -84,23 +93,24 @@ class Block(nn.Module):
 
 class GPTLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout, use_sinusoidal_embd):
+    def __init__(self, vocab_size, block_size, n_embd, n_head, n_layer, dropout, embedding_type):
         super().__init__()
         self.block_size = block_size
-        self.use_sinusoidal_embd = use_sinusoidal_embd
+        self.embedding_type = embedding_type
+        self.use_rope = embedding_type == "rope"
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
 
-        if self.use_sinusoidal_embd:
+        if self.embedding_type == "sinusoidal":
             # sinusoidal positional embeddings
             pe = sinusoidal_embedding(block_size, n_embd)
             self.register_buffer("position_embedding_table", pe)
-        else:
+        elif self.embedding_type == "learned":
             # learned positional embeddings
             self.position_embedding_table = nn.Embedding(block_size, n_embd)
 
         self.blocks = nn.Sequential(*[
-            Block(n_embd, n_head=n_head, block_size=block_size, dropout=dropout)
+            Block(n_embd, n_head=n_head, block_size=block_size, dropout=dropout, use_rope=self.use_rope)
             for _ in range(n_layer)])
         self.ln_f = nn.LayerNorm(n_embd) # final layer norm
         self.lm_head = nn.Linear(n_embd, vocab_size)
@@ -123,12 +133,16 @@ class GPTLanguageModel(nn.Module):
         tok_emb = self.token_embedding_table(idx) * (self.token_embedding_table.embedding_dim ** 0.5) # (B,T,C)
 
         # positional embeddings
-        if self.use_sinusoidal_embd:
-            pos_emb = self.position_embedding_table[:T, :]  # (T,C)
+        if self.use_rope:
+            x = tok_emb
         else:
-            pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device)) # (T,C)
+            if self.embedding_type == "sinusoidal":
+                pos_emb = self.position_embedding_table[:T, :]  # (T,C)
+            else:
+                pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device)) # (T,C)
 
-        x = tok_emb + pos_emb # (B,T,C), broadcasting position embeddings
+            x = tok_emb + pos_emb # (B,T,C), broadcasting position embeddings
+        
         x = self.blocks(x) # (B,T,C)
         x = self.ln_f(x) # (B,T,C)
         logits = self.lm_head(x) # (B,T,vocab_size)

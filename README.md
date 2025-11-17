@@ -19,7 +19,55 @@ This project extends the original GPT by scaling both the dataset and the model.
 ### Model scaling
 
 Scaled the model from 10M to 42M parameters:
+  - increased vocab size from 65 to 16,256
   - increased embedding size, number of heads, and context length
-  - kept the lightweight GPT architecture developed by Karpathy to maintain clarity and readability
+  - implemented positional embeddings from scratch: **sinusoidal embedding** and **RoPE** (Rotary Positional Embeddings)
+  - trained with the new tokenizer and dataset to validate scalability and performance improvements
+  - rule of thumb ~20 training tokens per parameter: we had 724.3M training tokens so ~17.3 training tokens/parameter
 
-Trained with the new tokenizer and dataset to validate scalability and performance improvements
+I kept the lightweight GPT architecture developed by Karpathy to maintain clarity and readability.
+
+### Usage
+
+1. Data downloading and preprocessing: `python data/prepare.py` (tokenization and storage)
+
+NB: since the data is hosted on Hugging Face, you will need to login to Hugging Face
+
+2. Training job: `python train.py`.
+
+I did my experiments with the following hyperparameters:
+
+```python
+num_merges = 16000 # number of merges for the tokenizer (+256 base tokens)
+batch_size = 32 # how many independent sequences we process in parallel
+block_size = 512 # maximum context length for predictions
+max_iters = 5000
+eval_interval = 500
+learning_rate = 3e-4
+eval_iters = 200
+n_embd = 512
+n_head = n_embd // 64
+n_layer = 8
+dropout = 0.1
+```
+
+## Results
+
+The model was trained for 5000 iterations on a single A10 (24 GB VRAM) GPU, for the 3 different positional embeddings implemented: learned, sinusoidal, and RoPE. It took approximately an hour to train each model.
+
+| Positional encoding | Parameters (M) | Final val loss |
+|--------------------|------------|----------------|
+| **RoPE**           | 41.87 M     | **3.739**      |
+| Sinusoidal         | 41.87 M     | 3.841          |
+| Learned            | 42.13 M     | 3.945          |
+
+RoPE outperformed the other methods, achieving the lowest validation loss and fastest convergence. Sinusoidal embeddings were competitive but slightly worse than RoPE, while learned embeddings had the highest loss and slowest convergence.
+
+### Samples
+
+(to be added)
+
+## What's next?
+
+1. Add special tokens (e.g. end-of-text, beginning-of-sentence, padding, unknown) to the tokenizer and retrain the model
+2. Instruction fine-tuning on a smaller, high-quality dataset, selection (here)[https://huggingface.co/collections/librarian-bots/top-10-instruction-tuning-datasets]

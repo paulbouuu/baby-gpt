@@ -9,13 +9,13 @@ from datasets import load_dataset
 from tokenizer import truncated_cl100k
 
 # parameters
-TRAIN_TEST_SPLIT = 0.9
+TRAIN_TEST_SPLIT = 0.95
 OUT_DIR = "data"
 # ------------
 
 ds = load_dataset(
     "parquet",
-    data_files="hf://datasets/Skylion007/openwebtext@refs/pr/19/data/train-0000[0-2]-of-00080.parquet",
+    data_files="hf://datasets/Skylion007/openwebtext@refs/pr/19/data/train-0000[0-5]-of-00080.parquet",
     split="train",
     streaming=True
 )
