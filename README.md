@@ -70,4 +70,4 @@ RoPE outperformed the other methods, achieving the lowest validation loss and fa
 ## What's next?
 
 1. Add special tokens (e.g. end-of-text, beginning-of-sentence, padding, unknown) to the tokenizer and retrain the model
-2. Instruction fine-tuning on a smaller, high-quality dataset, selection (here)[https://huggingface.co/collections/librarian-bots/top-10-instruction-tuning-datasets]
+2. Instruction fine-tuning on a smaller, high-quality dataset, selection [here](https://huggingface.co/collections/librarian-bots/top-10-instruction-tuning-datasets).
